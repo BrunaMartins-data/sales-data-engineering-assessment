@@ -74,6 +74,6 @@ This project loads three CSV files using PySpark, creates raw and typed/stored t
 ## How to run
 
 1. Upload the three CSV files to Databricks.
-2. Update the file paths at the top of `tech_assessment_solution.py`.
+2. Update the file paths at the top of `assessment_solution.py`.
 3. Run the script in a Databricks notebook or as a job.
 4. Validate the generated tables and outputs.
