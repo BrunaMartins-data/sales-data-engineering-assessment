@@ -1,79 +1,400 @@
-# sales-data-engineering-assessment
-PySpark data engineering assessment for loading raw sales and product data, applying data type review, creating transformed store tables, publishing analytical datasets, and answering business questions.
+# Sales Data Engineering Assessment - Medallion Architecture - Local Parquet Version
 
-# Interview Case Study - Data Loading, Transformations and Analysis
+This project implements the Data Engineering tech assessment using PySpark and local Parquet files.
 
-## Scope
+The project avoids local Spark managed tables, Hive metastore, and Delta dependencies to keep execution simple in VSCode/Jupyter on Windows. Each Parquet folder is treated as a logical table.
 
-This project loads three CSV files using PySpark, creates raw and typed/stored tables, publishes transformed product and order datasets, and answers the two requested analysis questions.
+## Original Requirements Covered
 
-## Tables
+* Load three files using SQL or PySpark.
+* Name raw objects with a `raw_` prefix.
+* Review and apply appropriate data types.
+* Identify primary and foreign keys.
+* Store transformed objects with a `store_` prefix.
+* Create `publish_product`.
+* Create `publish_orders`.
+* Calculate `LeadTimeInBusinessDays`, excluding Saturdays and Sundays.
+* Calculate `TotalLineExtendedPrice`.
+* Answer:
 
-### Raw tables
+  * Which color generated the highest revenue each year?
+  * What is the average `LeadTimeInBusinessDays` by `ProductCategoryName`?
+* Check negative dates.
+* Use Medallion Architecture.
+* Keep Bronze, Silver, Gold and quality checks in separate files.
+* Add Senior-style quality checks.
+* Clean invalid records in the trusted Silver layer.
+* Keep raw source data unchanged in the Bronze layer.
 
-- `raw_sales_order_detail`
-- `raw_sales_order_header`
-- `raw_products`
+## Architecture
 
-### Store tables
+```text
+Bronze -> Silver -> Gold
+```
 
-- `store_sales_order_detail`
-- `store_sales_order_header`
-- `store_products`
+Mapping to the original assessment:
 
-### Publish tables
+| Original requirement | Local Medallion implementation                                                  |
+| -------------------- | ------------------------------------------------------------------------------- |
+| `raw_` tables        | `parquet_tables/bronze/raw_*`                                                   |
+| `store_` tables      | `parquet_tables/silver/store_*`                                                 |
+| `publish_*` tables   | `parquet_tables/gold/publish_*`                                                 |
+| Quality reports      | `parquet_tables/silver/quality_report` and `parquet_tables/gold/quality_report` |
+| Invalid date records | `parquet_tables/quarantine/negative_dates/*`                                    |
 
-- `publish_product`
-- `publish_orders`
+## Project Structure
 
-## Data model review
+```text
+.
+├── setup.py
+├── config.py
+├── utils.py
+├── 00_quality_checks.ipynb
+├── 01_bronze_layer.ipynb
+├── 02_silver_layer.ipynb
+├── 03_gold_layer.ipynb
+├── 04_run_all_pipeline.ipynb
+├── requirements.txt
+├── .gitignore
+└── README.md
+```
 
-### Primary keys
+## Input Files
 
-- `store_sales_order_detail`: `SalesOrderDetailID`
-- `store_sales_order_header`: `SalesOrderID`
-- `store_products` / `publish_product`: `ProductID`
+Place the three source files inside a local `files/` folder in the project root:
 
-### Foreign keys
+```text
+files/
+├── sales-order-detail.csv
+├── sales-order-header.csv
+└── products.csv
+```
 
-- `store_sales_order_detail.SalesOrderID` → `store_sales_order_header.SalesOrderID`
-- `store_sales_order_detail.ProductID` → `store_products.ProductID`
+Default paths are defined in `config.py`:
 
-## Data quality observations
+```python
+SALES_ORDER_DETAIL_PATH = "files/sales-order-detail.csv"
+SALES_ORDER_HEADER_PATH = "files/sales-order-header.csv"
+PRODUCTS_PATH = "files/products.csv"
+```
 
-- `SalesOrderDetailID` is unique in sales order detail.
-- `SalesOrderID` is unique in sales order header.
-- `ProductID` has duplicates in the raw product file. The solution deduplicates products by keeping one row per `ProductID`, prioritizing records with `ProductCategoryName` already populated. This avoids duplicated revenue after joining orders to products.
-- `OrderDate` has mixed formats: mostly `yyyy-MM-dd`, with a few `yyyy-MM`. The solution converts `yyyy-MM` to the first day of the month.
+## Installation
 
-## Business day logic
+Create and activate a virtual environment, then install dependencies:
 
-`LeadTimeInBusinessDays` is calculated as the number of weekdays from `OrderDate` up to the day before `ShipDate`, excluding Saturdays and Sundays. This follows `datediff`-style semantics where the end date is not counted.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-## Local validation results on the provided files
+Minimum dependencies:
 
-### Highest revenue color by year
+```text
+pyspark==3.5.1
+pandas
+python-dateutil
+ipykernel
+nbformat
+```
 
-| Year | Color | Revenue |
-|---:|---|---:|
-| 2021 | Red | 6,019,614.08 |
-| 2022 | Black | 14,005,238.36 |
-| 2023 | Black | 15,047,692.77 |
-| 2024 | Yellow | 6,368,158.11 |
+## Java / Spark Local Notes
 
-### Average LeadTimeInBusinessDays by ProductCategoryName
+The local Spark setup is centralized in `setup.py`.
 
-| ProductCategoryName | AvgLeadTimeInBusinessDays |
-|---|---:|
-| NULL / Uncategorized | 5.0108 |
-| Accessories | 5.0065 |
-| Clothing | 5.0051 |
-| Bikes | 5.0049 |
-| Components | 5.0033 |
+The fallback `JAVA_HOME` is:
 
-## How to run
+```text
+C:\Users\bruna.martins\java\jdk-17.0.19+10
+```
 
-1. Upload the three CSV files to Databricks.
-2. Update the file paths at the top of `assessment_solution.py`.
-3. Run the script in a Databricks notebook or as a job.
-4. Validate the generated tables and outputs.
+If your JDK is installed somewhere else, either:
+
+1. Set `JAVA_HOME` in your machine, or
+2. Update the fallback path inside `setup.py`.
+
+For Windows local execution, Spark may also require a local Hadoop folder with `winutils.exe`:
+
+```text
+C:\hadoop\bin\winutils.exe
+```
+
+The expected Hadoop environment variable is:
+
+```text
+HADOOP_HOME=C:\hadoop
+```
+
+This is only required for local Windows execution. In Databricks, Linux, or managed Spark environments, this setup is not needed.
+
+## How to Run
+
+### Option 1 - Full pipeline
+
+Open and run:
+
+```text
+04_run_all_pipeline.ipynb
+```
+
+### Option 2 - Layer by layer
+
+Run the notebooks in this order:
+
+```text
+01_bronze_layer.ipynb
+02_silver_layer.ipynb
+03_gold_layer.ipynb
+```
+
+The quality check functions are loaded inside the Silver and Gold notebooks using:
+
+```python
+%run ./00_quality_checks.ipynb
+```
+
+## Output Layout
+
+The project writes local Parquet datasets as logical tables:
+
+```text
+parquet_tables/
+├── bronze/
+│   ├── raw_sales_order_detail/
+│   ├── raw_sales_order_header/
+│   └── raw_products/
+├── silver/
+│   ├── store_sales_order_detail/
+│   ├── store_sales_order_header/
+│   ├── store_products_typed/
+│   ├── store_products/
+│   └── quality_report/
+├── gold/
+│   ├── publish_product/
+│   ├── publish_orders/
+│   ├── answer_highest_revenue_color_by_year/
+│   ├── answer_avg_lead_time_by_category/
+│   └── quality_report/
+└── quarantine/
+    └── negative_dates/
+```
+
+## Bronze Layer
+
+Notebook:
+
+```text
+01_bronze_layer.ipynb
+```
+
+Creates:
+
+```text
+parquet_tables/bronze/raw_sales_order_detail
+parquet_tables/bronze/raw_sales_order_header
+parquet_tables/bronze/raw_products
+```
+
+Purpose:
+
+* Load source CSV files.
+* Keep source columns as strings.
+* Add ingestion metadata.
+* Persist raw data as Parquet.
+* Preserve the original source data without applying business filters.
+
+## Silver Layer
+
+Notebook:
+
+```text
+02_silver_layer.ipynb
+```
+
+Creates:
+
+```text
+parquet_tables/silver/store_sales_order_detail
+parquet_tables/silver/store_sales_order_header
+parquet_tables/silver/store_products_typed
+parquet_tables/silver/store_products
+parquet_tables/silver/quality_report
+```
+
+Purpose:
+
+* Apply explicit data types.
+* Parse mixed date formats.
+* Identify primary and foreign keys.
+* Deduplicate products by `ProductID`.
+* Remove invalid sales detail records with negative `OrderQty`.
+* Run quality checks.
+* Keep a quality report for validation and traceability.
+
+The Bronze layer keeps all original records. The Silver layer represents the cleaned and trusted version used to build the Gold outputs.
+
+## Gold Layer
+
+Notebook:
+
+```text
+03_gold_layer.ipynb
+```
+
+Creates:
+
+```text
+parquet_tables/gold/publish_product
+parquet_tables/gold/publish_orders
+parquet_tables/gold/answer_highest_revenue_color_by_year
+parquet_tables/gold/answer_avg_lead_time_by_category
+parquet_tables/gold/quality_report
+```
+
+Purpose:
+
+* Apply product master business rules.
+* Create `publish_product`.
+* Create `publish_orders`.
+* Calculate `LeadTimeInBusinessDays`.
+* Calculate `TotalLineExtendedPrice`.
+* Answer the analytical questions.
+* Run final quality checks.
+
+## Keys
+
+Primary keys:
+
+| Logical table              | Primary key          |
+| -------------------------- | -------------------- |
+| `store_sales_order_detail` | `SalesOrderDetailID` |
+| `store_sales_order_header` | `SalesOrderID`       |
+| `store_products`           | `ProductID`          |
+| `publish_product`          | `ProductID`          |
+| `publish_orders`           | `SalesOrderDetailID` |
+
+Foreign keys:
+
+| Source                     | Key            | Target                                  |
+| -------------------------- | -------------- | --------------------------------------- |
+| `store_sales_order_detail` | `SalesOrderID` | `store_sales_order_header.SalesOrderID` |
+| `store_sales_order_detail` | `ProductID`    | `store_products.ProductID`              |
+| `publish_orders`           | `ProductID`    | `publish_product.ProductID`             |
+
+## Senior Quality Checks
+
+The project includes reusable quality functions in `00_quality_checks.ipynb`:
+
+* Primary key uniqueness.
+* Foreign key integrity.
+* Not-null checks.
+* Non-negative numeric checks.
+* Negative date interval checks.
+* Critical failure evaluation with configurable behavior.
+
+The project also handles source data issues found during execution:
+
+### Duplicate products
+
+The typed product dataset may contain duplicate `ProductID` values:
+
+```text
+store_products_typed
+```
+
+This is tracked as a warning because this table represents the typed source product data before deduplication.
+
+The trusted product table is deduplicated:
+
+```text
+store_products
+```
+
+### Negative order quantities
+
+Records with negative `OrderQty` are removed in the Silver layer before saving:
+
+```text
+store_sales_order_detail
+```
+
+This prevents invalid negative revenue from propagating into the Gold layer through:
+
+```text
+TotalLineExtendedPrice = OrderQty * (UnitPrice - UnitPriceDiscount)
+```
+
+### Negative date intervals
+
+The main feedback-related validation is:
+
+```text
+ShipDate < OrderDate
+```
+
+When this happens:
+
+1. The quality report flags the issue.
+2. The invalid date record is written to `parquet_tables/quarantine/negative_dates/`.
+3. `LeadTimeInBusinessDays` is set to `null` in Gold so invalid dates do not contaminate the average lead time metric.
+
+## Product Master Transformations
+
+`publish_product` applies:
+
+* Replace null `Color` with `N/A`.
+* Fill missing `ProductCategoryName` using `ProductSubCategoryName`:
+
+  * Clothing: `Gloves`, `Shorts`, `Socks`, `Tights`, `Vests`.
+  * Accessories: `Locks`, `Lights`, `Headsets`, `Helmets`, `Pedals`, `Pumps`.
+  * Components: subcategories containing `Frames` or in `Wheels`, `Saddles`.
+
+## Sales Order Transformations
+
+`publish_orders` applies:
+
+* Join `store_sales_order_detail` with `store_sales_order_header` using `SalesOrderID`.
+* Include all fields from SalesOrderDetail.
+* Include all fields from SalesOrderHeader except `SalesOrderID`.
+* Rename `Freight` to `TotalOrderFreight`.
+* Calculate:
+
+```text
+TotalLineExtendedPrice = OrderQty * (UnitPrice - UnitPriceDiscount)
+```
+
+* Calculate business lead time excluding Saturdays and Sundays.
+* Keep `HasNegativeDateInterval` to make invalid date intervals explicit.
+
+## Analytical Outputs
+
+The Gold layer answers:
+
+### Which color generated the highest revenue each year?
+
+Saved as:
+
+```text
+parquet_tables/gold/answer_highest_revenue_color_by_year
+```
+
+### What is the average LeadTimeInBusinessDays by ProductCategoryName?
+
+Saved as:
+
+```text
+parquet_tables/gold/answer_avg_lead_time_by_category
+```
+
+## Production Notes
+
+For production, this design could be improved by:
+
+* Replacing local Parquet with Delta tables.
+* Using Unity Catalog or a managed metastore.
+* Adding CI/CD automated tests.
+* Setting `FAIL_ON_CRITICAL = True`.
+* Adding alerting and data observability.
+* Using a business calendar table to handle holidays.
+* Supporting incremental loads with Delta Merge.
