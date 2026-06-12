@@ -2,8 +2,6 @@
 
 This project implements the Data Engineering tech assessment using PySpark and local Parquet files.
 
-The project avoids local Spark managed tables, Hive metastore, and Delta dependencies to keep execution simple in VSCode/Jupyter on Windows. Each Parquet folder is treated as a logical table.
-
 ## Original Requirements Covered
 
 - Load three files using SQL or PySpark.
@@ -21,7 +19,7 @@ The project avoids local Spark managed tables, Hive metastore, and Delta depende
 - Check negative dates.
 - Use Medallion Architecture.
 - Keep Bronze, Silver, Gold and quality checks in separate files.
-- Add quality checks and quarantine invalid records.
+- Add quality checks.
 
 ## Architecture
 
