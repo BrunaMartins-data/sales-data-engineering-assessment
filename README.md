@@ -6,19 +6,22 @@ The project avoids local Spark managed tables, Hive metastore, and Delta depende
 
 ## Original Requirements Covered
 
-* Load three files using SQL or PySpark.
-* Name raw objects with a `raw_` prefix.
-* Review and apply appropriate data types.
-* Identify primary and foreign keys.
-* Store transformed objects with a `store_` prefix.
-* Create `publish_product`.
-* Create `publish_orders`.
-* Calculate `LeadTimeInBusinessDays`, excluding Saturdays and Sundays.
-* Calculate `TotalLineExtendedPrice`.
-* Answer:
-
-  * Which color generated the highest revenue each year?
-  * What is the average `LeadTimeInBusinessDays` by `ProductCategoryName`?
+- Load three files using SQL or PySpark.
+- Name raw objects with a `raw_` prefix.
+- Review and apply appropriate data types.
+- Identify primary and foreign keys.
+- Store transformed objects with a `store_` prefix.
+- Create `publish_product`.
+- Create `publish_orders`.
+- Calculate `LeadTimeInBusinessDays`, excluding Saturdays and Sundays.
+- Calculate `TotalLineExtendedPrice`.
+- Answer:
+  - Which color generated the highest revenue each year?
+  - What is the average `LeadTimeInBusinessDays` by `ProductCategoryName`?
+- Check negative dates.
+- Use Medallion Architecture.
+- Keep Bronze, Silver, Gold and quality checks in separate files.
+- Add Senior-style quality checks and quarantine invalid records.
 
 ## Architecture
 
@@ -28,13 +31,12 @@ Bronze -> Silver -> Gold
 
 Mapping to the original assessment:
 
-| Original requirement | Local Medallion implementation                                                  |
-| -------------------- | ------------------------------------------------------------------------------- |
-| `raw_` tables        | `parquet_tables/bronze/raw_*`                                                   |
-| `store_` tables      | `parquet_tables/silver/store_*`                                                 |
-| `publish_*` tables   | `parquet_tables/gold/publish_*`                                                 |
-| Quality reports      | `parquet_tables/silver/quality_report` and `parquet_tables/gold/quality_report` |
-| Invalid date records | `parquet_tables/quarantine/negative_dates/*`                                    |
+| Original requirement | Local Medallion implementation |
+|---|---|
+| `raw_` tables | `parquet_tables/bronze/raw_*` |
+| `store_` tables | `parquet_tables/silver/store_*` |
+| `publish_*` tables | `parquet_tables/gold/publish_*` |
+| Invalid records | `parquet_tables/quarantine/*` |
 
 ## Project Structure
 
@@ -90,7 +92,6 @@ pyspark==3.5.1
 pandas
 python-dateutil
 ipykernel
-nbformat
 ```
 
 ## Java / Spark Local Notes
@@ -108,20 +109,6 @@ If your JDK is installed somewhere else, either:
 1. Set `JAVA_HOME` in your machine, or
 2. Update the fallback path inside `setup.py`.
 
-For Windows local execution, Spark may also require a local Hadoop folder with `winutils.exe`:
-
-```text
-C:\hadoop\bin\winutils.exe
-```
-
-The expected Hadoop environment variable is:
-
-```text
-HADOOP_HOME=C:\hadoop
-```
-
-This is only required for local Windows execution. In Databricks, Linux, or managed Spark environments, this setup is not needed.
-
 ## How to Run
 
 ### Option 1 - Full pipeline
@@ -137,15 +124,10 @@ Open and run:
 Run the notebooks in this order:
 
 ```text
+00_quality_checks.ipynb
 01_bronze_layer.ipynb
 02_silver_layer.ipynb
 03_gold_layer.ipynb
-```
-
-The quality check functions are loaded inside the Silver and Gold notebooks using:
-
-```python
-%run ./00_quality_checks.ipynb
 ```
 
 ## Output Layout
@@ -192,11 +174,10 @@ parquet_tables/bronze/raw_products
 
 Purpose:
 
-* Load source CSV files.
-* Keep source columns as strings.
-* Add ingestion metadata.
-* Persist raw data as Parquet.
-* Preserve the original source data without applying business filters.
+- Load source CSV files.
+- Keep source columns as strings.
+- Add ingestion metadata.
+- Persist raw data as Parquet.
 
 ## Silver Layer
 
@@ -218,15 +199,12 @@ parquet_tables/silver/quality_report
 
 Purpose:
 
-* Apply explicit data types.
-* Parse mixed date formats.
-* Identify primary and foreign keys.
-* Deduplicate products by `ProductID`.
-* Remove invalid sales detail records with negative `OrderQty`.
-* Run quality checks.
-* Keep a quality report for validation and traceability.
-
-The Bronze layer keeps all original records. The Silver layer represents the cleaned and trusted version used to build the Gold outputs.
+- Apply explicit data types.
+- Parse mixed date formats.
+- Identify primary and foreign keys.
+- Deduplicate products by `ProductID`.
+- Run quality checks.
+- Quarantine records with `ShipDate < OrderDate`.
 
 ## Gold Layer
 
@@ -248,78 +226,45 @@ parquet_tables/gold/quality_report
 
 Purpose:
 
-* Apply product master business rules.
-* Create `publish_product`.
-* Create `publish_orders`.
-* Calculate `LeadTimeInBusinessDays`.
-* Calculate `TotalLineExtendedPrice`.
-* Answer the analytical questions.
-* Run final quality checks.
+- Apply product master business rules.
+- Create `publish_product`.
+- Create `publish_orders`.
+- Calculate `LeadTimeInBusinessDays`.
+- Calculate `TotalLineExtendedPrice`.
+- Answer the analytical questions.
+- Run final quality checks.
 
 ## Keys
 
 Primary keys:
 
-| Logical table              | Primary key          |
-| -------------------------- | -------------------- |
+| Logical table | Primary key |
+|---|---|
 | `store_sales_order_detail` | `SalesOrderDetailID` |
-| `store_sales_order_header` | `SalesOrderID`       |
-| `store_products`           | `ProductID`          |
-| `publish_product`          | `ProductID`          |
-| `publish_orders`           | `SalesOrderDetailID` |
+| `store_sales_order_header` | `SalesOrderID` |
+| `store_products` | `ProductID` |
+| `publish_product` | `ProductID` |
+| `publish_orders` | `SalesOrderDetailID` |
 
 Foreign keys:
 
-| Source                     | Key            | Target                                  |
-| -------------------------- | -------------- | --------------------------------------- |
+| Source | Key | Target |
+|---|---|---|
 | `store_sales_order_detail` | `SalesOrderID` | `store_sales_order_header.SalesOrderID` |
-| `store_sales_order_detail` | `ProductID`    | `store_products.ProductID`              |
-| `publish_orders`           | `ProductID`    | `publish_product.ProductID`             |
+| `store_sales_order_detail` | `ProductID` | `store_products.ProductID` |
+| `publish_orders` | `ProductID` | `publish_product.ProductID` |
 
-## Quality Checks
+## Senior Quality Checks
 
 The project includes reusable quality functions in `00_quality_checks.ipynb`:
 
-* Primary key uniqueness.
-* Foreign key integrity.
-* Not-null checks.
-* Non-negative numeric checks.
-* Negative date interval checks.
-* Critical failure evaluation with configurable behavior.
-
-The project also handles source data issues found during execution:
-
-### Duplicate products
-
-The typed product dataset may contain duplicate `ProductID` values:
-
-```text
-store_products_typed
-```
-
-This is tracked as a warning because this table represents the typed source product data before deduplication.
-
-The trusted product table is deduplicated:
-
-```text
-store_products
-```
-
-### Negative order quantities
-
-Records with negative `OrderQty` are removed in the Silver layer before saving:
-
-```text
-store_sales_order_detail
-```
-
-This prevents invalid negative revenue from propagating into the Gold layer through:
-
-```text
-TotalLineExtendedPrice = OrderQty * (UnitPrice - UnitPriceDiscount)
-```
-
-### Negative date intervals
+- Primary key uniqueness.
+- Foreign key integrity.
+- Not-null checks.
+- Non-negative numeric checks.
+- Negative date interval checks.
+- Quarantine for invalid date records.
+- Critical failure evaluation with configurable behavior.
 
 The main feedback-related validation is:
 
@@ -330,65 +275,43 @@ ShipDate < OrderDate
 When this happens:
 
 1. The quality report flags the issue.
-2. The invalid date record is written to `parquet_tables/quarantine/negative_dates/`.
+2. The invalid record is written to `parquet_tables/quarantine/negative_dates/`.
 3. `LeadTimeInBusinessDays` is set to `null` in Gold so invalid dates do not contaminate the average lead time metric.
 
 ## Product Master Transformations
 
 `publish_product` applies:
 
-* Replace null `Color` with `N/A`.
-* Fill missing `ProductCategoryName` using `ProductSubCategoryName`:
-
-  * Clothing: `Gloves`, `Shorts`, `Socks`, `Tights`, `Vests`.
-  * Accessories: `Locks`, `Lights`, `Headsets`, `Helmets`, `Pedals`, `Pumps`.
-  * Components: subcategories containing `Frames` or in `Wheels`, `Saddles`.
+- Replace null `Color` with `N/A`.
+- Fill missing `ProductCategoryName` using `ProductSubCategoryName`:
+  - Clothing: `Gloves`, `Shorts`, `Socks`, `Tights`, `Vests`.
+  - Accessories: `Locks`, `Lights`, `Headsets`, `Helmets`, `Pedals`, `Pumps`.
+  - Components: subcategories containing `Frames` or in `Wheels`, `Saddles`.
 
 ## Sales Order Transformations
 
 `publish_orders` applies:
 
-* Join `store_sales_order_detail` with `store_sales_order_header` using `SalesOrderID`.
-* Include all fields from SalesOrderDetail.
-* Include all fields from SalesOrderHeader except `SalesOrderID`.
-* Rename `Freight` to `TotalOrderFreight`.
-* Calculate:
+- Join `store_sales_order_detail` with `store_sales_order_header` using `SalesOrderID`.
+- Include all fields from SalesOrderDetail.
+- Include all fields from SalesOrderHeader except `SalesOrderID`.
+- Rename `Freight` to `TotalOrderFreight`.
+- Calculate:
 
 ```text
 TotalLineExtendedPrice = OrderQty * (UnitPrice - UnitPriceDiscount)
 ```
 
-* Calculate business lead time excluding Saturdays and Sundays.
-* Keep `HasNegativeDateInterval` to make invalid date intervals explicit.
-
-## Analytical Outputs
-
-The Gold layer answers:
-
-### Which color generated the highest revenue each year?
-
-Saved as:
-
-```text
-parquet_tables/gold/answer_highest_revenue_color_by_year
-```
-
-### What is the average LeadTimeInBusinessDays by ProductCategoryName?
-
-Saved as:
-
-```text
-parquet_tables/gold/answer_avg_lead_time_by_category
-```
+- Calculate business lead time excluding Saturdays and Sundays.
 
 ## Production Notes
 
 For production, this design could be improved by:
 
-* Replacing local Parquet with Delta tables.
-* Using Unity Catalog or a managed metastore.
-* Adding CI/CD automated tests.
-* Setting `FAIL_ON_CRITICAL = True`.
-* Adding alerting and data observability.
-* Using a business calendar table to handle holidays.
-* Supporting incremental loads with Delta Merge.
+- Replacing local Parquet with Delta tables.
+- Using Unity Catalog or a managed metastore.
+- Adding CI/CD automated tests.
+- Setting `FAIL_ON_CRITICAL = True`.
+- Adding alerting and data observability.
+- Using a business calendar table to handle holidays.
+- Supporting incremental loads with Delta Merge.
