@@ -19,12 +19,6 @@ The project avoids local Spark managed tables, Hive metastore, and Delta depende
 
   * Which color generated the highest revenue each year?
   * What is the average `LeadTimeInBusinessDays` by `ProductCategoryName`?
-* Check negative dates.
-* Use Medallion Architecture.
-* Keep Bronze, Silver, Gold and quality checks in separate files.
-* Add Senior-style quality checks.
-* Clean invalid records in the trusted Silver layer.
-* Keep raw source data unchanged in the Bronze layer.
 
 ## Architecture
 
@@ -282,7 +276,7 @@ Foreign keys:
 | `store_sales_order_detail` | `ProductID`    | `store_products.ProductID`              |
 | `publish_orders`           | `ProductID`    | `publish_product.ProductID`             |
 
-## Senior Quality Checks
+## Quality Checks
 
 The project includes reusable quality functions in `00_quality_checks.ipynb`:
 
